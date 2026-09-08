@@ -1,0 +1,31 @@
+*.pyc
+
+# Packages
+/dist/*
+
+# Unit test / coverage reports
+.coverage
+.pytest_cache
+
+.DS_Store
+.idea/*
+.python-version
+.vscode/*
+
+/docs/site/*
+.mypy_cache
+
+.venv
+/poetry.toml
+
+# Logs (pueden contener datos sensibles de ejecución)
+/logs/*
+!/logs/.gitkeep
+
+# Entradas/salidas con datos sensibles
+/entradas/*
+/salidas/*
+/errores/*
+!/entradas/.gitkeep
+!/salidas/.gitkeep
+!/errores/.gitkeep

@@ -1,0 +1,21 @@
+[project]
+name = "plantilla-automatizacion-rpa-python"
+version = "0.1.0"
+description = "Plantilla de automatización en Python construida por la Célula de Mejora Operativa."
+authors = [
+    {name = "juanc.gallego@bancounion.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "polars (>=1.39.3,<2.0.0)",
+    "selenium (>=4.41.0,<5.0.0)",
+    "webdriver-manager (>=4.0.2,<5.0.0)",
+    "fastexcel (>=0.19.0,<0.20.0)",
+    "xlsxwriter (>=3.2.9,<4.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
