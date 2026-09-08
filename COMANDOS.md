@@ -116,6 +116,23 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 ```
 
+> **Cuidado:** ese filtro busca la ruta del proyecto en la línea de comandos. Si arrancaste
+> con ruta relativa (`streamlit run client/app.py`), la ruta **no aparece** y el proceso
+> sobrevive — luego el nuevo no puede tomar el puerto y sigues viendo código viejo.
+
+Matar por puerto es infalible, porque no depende de cómo lo lanzaste:
+
+```powershell
+# Cambia 8501 por 8765 para el Bot. Mata el proceso y su padre.
+$owner = (Get-NetTCPConnection -LocalPort 8501 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+$todos = @()
+foreach ($o in $owner) {
+  $todos += $o
+  $todos += (Get-CimInstance Win32_Process -Filter "ProcessId=$o").ParentProcessId
+}
+if ($todos) { Stop-Process -Id ($todos | Sort-Object -Unique) -Force -ErrorAction SilentlyContinue }
+```
+
 ```powershell
 # Matar Chrome huérfano dejado por el bot (NO toca tu Chrome normal)
 $p = (Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" |
@@ -163,7 +180,11 @@ Al conectar ya recibes un evento sin pedir nada. Mensajes que puedes enviar:
 { "type": "command", "version": 1, "id": "4", "cmd": "stop",   "payload": {} }
 { "type": "command", "version": 1, "id": "5", "cmd": "logout", "payload": {} }
 { "type": "command", "version": 1, "id": "6", "cmd": "login",  "payload": { "username": "USUARIO", "password": "CLAVE" } }
+{ "type": "command", "version": 1, "id": "7", "cmd": "demo",   "payload": { "registros": 20, "pausa": 1.0 } }
 ```
+
+> `demo` recorre un lote falso emitiendo los mismos eventos que una corrida real, sin abrir
+> Chrome ni tocar SIIF. Sirve para probar la UI y el WebSocket sin credenciales.
 
 > No dejes tu contraseña guardada en los archivos `.bru` de la colección.
 

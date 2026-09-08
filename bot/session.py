@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from typing import Any, Callable
 
 import protocol
@@ -159,6 +160,85 @@ class BotSession:
             self._emit(
                 protocol.EVT_RUN_FINISHED,
                 {"error": str(exc), **dict(self.counters), "detenido": True},
+            )
+        finally:
+            self.running = False
+            self._busy.release()
+            self._emit_state()
+
+    def demo(self, registros: int = 12, pausa: float = 1.0) -> tuple[bool, str]:
+        """Recorre un lote falso emitiendo los mismos eventos que una corrida real.
+
+        No abre Chrome ni toca SIIF: sirve para ver y desarrollar la UI sin gastar
+        una sesión del sistema real. Usa el mismo lock y la misma bandera de
+        parada, así que el botón Detener funciona igual.
+        """
+        if not self._busy.acquire(blocking=False):
+            raise BotBusyError("El bot está ocupado con otra operación")
+
+        self._stop_event.clear()
+        self.running = True
+        self._emit_state()
+
+        threading.Thread(
+            target=self._run_demo, args=(registros, pausa), name="bot-demo", daemon=True
+        ).start()
+        return True, f"Demo iniciada: {registros} registros simulados"
+
+    def _run_demo(self, registros: int, pausa: float) -> None:
+        try:
+            self._emit(
+                protocol.EVT_LOG,
+                {"level": "info", "message": "Modo demo: no se abre Chrome ni se toca SIIF"},
+            )
+            self._track(protocol.EVT_RUN_STARTED, {"total": registros})
+
+            exitos = errores = 0
+            detenido = False
+
+            for i in range(1, registros + 1):
+                if self._stop_event.is_set():
+                    detenido = True
+                    self._emit(
+                        protocol.EVT_LOG,
+                        {"level": "warning", "message": "Demo detenida por el usuario"},
+                    )
+                    break
+
+                cuenta = f"0010021{i:010d}"
+                self._track(
+                    protocol.EVT_PROGRESS,
+                    {"current": i, "total": registros, "numero_cuenta": cuenta},
+                )
+                time.sleep(pausa)
+
+                ok = i % 4 != 0  # uno de cada cuatro falla, para ver ambos caminos
+                if ok:
+                    exitos += 1
+                else:
+                    errores += 1
+
+                self._track(
+                    protocol.EVT_RECORD,
+                    {
+                        "index": str(i),
+                        "numero_cuenta": cuenta,
+                        "nombre_cuenta": f"CLIENTE DE PRUEBA {i}" if ok else "",
+                        "ok": ok,
+                        "message": "Simulado correctamente" if ok else "Cuenta no encontrada (simulado)",
+                    },
+                )
+
+            self._track(
+                protocol.EVT_RUN_FINISHED,
+                {
+                    "total": registros,
+                    "procesados": exitos + errores,
+                    "exitos": exitos,
+                    "errores": errores,
+                    "detenido": detenido,
+                    "demo": True,
+                },
             )
         finally:
             self.running = False

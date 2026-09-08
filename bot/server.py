@@ -155,6 +155,13 @@ class BotServer:
                 ok, message = self._session.execute()
                 return reply(ok, message)
 
+            if command.cmd == protocol.CMD_DEMO:
+                ok, message = self._session.demo(
+                    registros=int(command.payload.get("registros", 12)),
+                    pausa=float(command.payload.get("pausa", 1.0)),
+                )
+                return reply(ok, message)
+
             if command.cmd == protocol.CMD_LOGOUT:
                 ok, message = await asyncio.to_thread(self._session.logout)
                 return reply(ok, message)

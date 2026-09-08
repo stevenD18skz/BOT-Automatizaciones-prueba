@@ -114,7 +114,7 @@ elif state.get("connecting"):
 
     esperar_login()
 
-elif not state.get("logged_in"):
+elif not state.get("logged_in") and not state.get("running"):
     if state.get("last_message"):
         st.error(state["last_message"])
     st.markdown(
@@ -140,35 +140,66 @@ elif not state.get("logged_in"):
             elif response:
                 st.error(response.message)
 
-else:
-    controls, _ = st.columns([3, 1])
-    with controls:
-        col_run, col_stop = st.columns(2)
-        running = state.get("running", False)
-        if col_run.button(
-            "▶ Ejecutar proceso", type="primary", disabled=running, use_container_width=True
-        ):
-            response = run_command(protocol.CMD_EXECUTE)
-            if response and response.ok:
-                st.toast("Proceso iniciado", icon="▶️")
-            elif response:
-                st.error(response.message)
+    st.divider()
+    st.caption(
+        "¿Sin credenciales a mano? La demo recorre un lote falso emitiendo los mismos "
+        "eventos que una corrida real, sin abrir Chrome ni tocar SIIF."
+    )
+    demo_cols = st.columns([1, 1, 2])
+    registros = demo_cols[0].number_input("Registros", 3, 100, 12)
+    pausa = demo_cols[1].number_input("Segundos por registro", 0.2, 5.0, 1.0, step=0.1)
+    if demo_cols[2].button("🎬 Lanzar demo", use_container_width=True):
+        response = run_command(
+            protocol.CMD_DEMO, {"registros": int(registros), "pausa": float(pausa)}
+        )
+        if response and response.ok:
             st.rerun()
+        elif response:
+            st.error(response.message)
 
-        if col_stop.button(
-            "⏹ Detener", disabled=not running, use_container_width=True
-        ):
-            run_command(protocol.CMD_STOP)
-            st.toast("Detención solicitada", icon="⏹️")
-            st.rerun()
+else:
 
     @st.fragment(run_every="0.5s")
     def live_panel() -> None:
-        """Se refresca solo cada 0.5s con lo que el Bot vaya empujando."""
+        """Se refresca solo cada 0.5s con lo que el Bot vaya empujando.
+
+        Los botones viven aquí dentro y no en el cuerpo: si no, se quedarían
+        habilitados o deshabilitados según el estado del último dibujado.
+        """
         snap = client.snapshot()
 
         if snap.get("logged_in") is False and st.session_state.rendered_logged_in:
             st.rerun(scope="app")
+
+        if not snap.get("logged_in"):
+            aviso, volver = st.columns([3, 1])
+            aviso.info("🎬 Modo demo — datos simulados, no se está tocando SIIF.")
+            if volver.button(
+                "← Volver", use_container_width=True, disabled=snap.get("running")
+            ):
+                st.rerun(scope="app")
+
+        controls, _ = st.columns([3, 1])
+        with controls:
+            col_run, col_stop = st.columns(2)
+            running = snap.get("running", False)
+            if col_run.button(
+                "▶ Ejecutar proceso",
+                type="primary",
+                disabled=running or not snap.get("logged_in"),
+                use_container_width=True,
+            ):
+                response = run_command(protocol.CMD_EXECUTE)
+                if response and response.ok:
+                    st.toast("Proceso iniciado", icon="▶️")
+                elif response:
+                    st.error(response.message)
+
+            if col_stop.button(
+                "⏹ Detener", disabled=not running, use_container_width=True
+            ):
+                run_command(protocol.CMD_STOP)
+                st.toast("Detención solicitada", icon="⏹️")
 
         progress = snap.get("progress") or {}
         counters = snap.get("counters") or {}
