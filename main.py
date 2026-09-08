@@ -3,21 +3,42 @@
     python main.py
 
 El Bot abre su propia ventana de consola para que veas el flujo de eventos en
-vivo; Streamlit se queda en esta terminal y abre el navegador solo.
+vivo; Streamlit se queda en esta terminal y el navegador se abre solo.
 
 Si prefieres arrancarlos por separado (útil para depurar):
     python -m bot.server
     streamlit run client/app.py
 """
 
+import socket
 import subprocess
 import sys
+import threading
+import time
+import webbrowser
 from pathlib import Path
 
 from client.ipc import ensure_bot_running, is_bot_running
-from config.settings import BOT_HOST, BOT_PORT
+from config.settings import BOT_HOST, BOT_PORT, UI_PORT
 
 BASE_DIR = Path(__file__).resolve().parent
+UI_URL = f"http://{BOT_HOST}:{UI_PORT}"
+
+
+def _port_open(port: int) -> bool:
+    try:
+        with socket.create_connection((BOT_HOST, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def _open_browser_when_ready() -> None:
+    for _ in range(60):
+        if _port_open(UI_PORT):
+            webbrowser.open(UI_URL)
+            return
+        time.sleep(0.5)
 
 
 def main() -> None:
@@ -34,10 +55,21 @@ def main() -> None:
             sys.exit(1)
         print(f"  Bot escuchando en ws://{BOT_HOST}:{BOT_PORT}")
 
-    print("  Abriendo la interfaz de Streamlit...\n")
+    print(f"  Abriendo la interfaz en {UI_URL} ...\n")
+    threading.Thread(target=_open_browser_when_ready, daemon=True).start()
+
     try:
+        # headless: evita que Streamlit pida un email por consola en el primer arranque.
         subprocess.run(
-            [sys.executable, "-m", "streamlit", "run", str(BASE_DIR / "client" / "app.py")],
+            [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                str(BASE_DIR / "client" / "app.py"),
+                "--server.headless=true",
+                f"--server.port={UI_PORT}",
+            ],
             cwd=str(BASE_DIR),
             check=False,
         )
