@@ -1,0 +1,6 @@
+[server]
+# Solo localhost: la UI pide credenciales de SIIF, no debe quedar expuesta en la red.
+address = "127.0.0.1"
+
+[browser]
+gatherUsageStats = false

@@ -1,29 +1,50 @@
-import logging
+"""Lanzador: arranca el Bot (WebSocket) y la UI (Streamlit) con un solo comando.
 
-from config.settings import BOT_NAME, PROCESS_NAME
-from core.utils.logging import setup_logging
-from services.workflows.orchestrator import Orchestrator
+    python main.py
+
+El Bot abre su propia ventana de consola para que veas el flujo de eventos en
+vivo; Streamlit se queda en esta terminal y abre el navegador solo.
+
+Si prefieres arrancarlos por separado (útil para depurar):
+    python -m bot.server
+    streamlit run client/app.py
+"""
+
+import subprocess
+import sys
+from pathlib import Path
+
+from client.ipc import ensure_bot_running, is_bot_running
+from config.settings import BOT_HOST, BOT_PORT
+
+BASE_DIR = Path(__file__).resolve().parent
 
 
-def main():
-    f"""
-    Punto de entrada para el proceso de {PROCESS_NAME}.
-    Configura logging, ejecuta la orquestación y maneja excepciones globales.
-    """
+def main() -> None:
+    print("=" * 60)
+    print("  Bot SIIF — arrancando Bot + UI")
+    print("=" * 60)
+
+    if is_bot_running():
+        print(f"  Bot ya estaba corriendo en ws://{BOT_HOST}:{BOT_PORT}")
+    else:
+        print("  Levantando el Bot (se abrirá otra ventana de consola)...")
+        if not ensure_bot_running():
+            print("  ERROR: el Bot no respondió. Revisa la ventana del Bot.")
+            sys.exit(1)
+        print(f"  Bot escuchando en ws://{BOT_HOST}:{BOT_PORT}")
+
+    print("  Abriendo la interfaz de Streamlit...\n")
     try:
-        setup_logging()
-        logging.info(f"=== Iniciando proceso RPA {BOT_NAME} ===")
-        orchestrator = Orchestrator()
-        orchestrator.run()
+        subprocess.run(
+            [sys.executable, "-m", "streamlit", "run", str(BASE_DIR / "client" / "app.py")],
+            cwd=str(BASE_DIR),
+            check=False,
+        )
     except KeyboardInterrupt:
-        logging.info("=== Proceso RPA interrumpido por el usuario ===")
-    except SystemExit:
-        logging.info("=== Proceso RPA terminado por el usuario ===")
-    except Exception as e:
-        logging.error(f"Error en el proceso RPA: {e}")
-        raise
+        pass
     finally:
-        logging.info("=== Proceso RPA finalizado ===")
+        print("\n  UI cerrada. El Bot sigue corriendo en su ventana; ciérrala con Ctrl+C.")
 
 
 if __name__ == "__main__":
