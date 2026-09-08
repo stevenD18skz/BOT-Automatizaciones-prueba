@@ -81,7 +81,19 @@ st.title("🤖 Bot SIIF — Consulta de Cuentas de Ahorros")
 state = client.snapshot()
 st.session_state.rendered_logged_in = state.get("logged_in", False)
 
-if not state.get("logged_in"):
+if state.get("connecting"):
+    st.info("Abriendo Chrome e iniciando sesión en SIIF... (puede tardar unos segundos)")
+
+    @st.fragment(run_every="0.5s")
+    def esperar_login() -> None:
+        if not client.snapshot().get("connecting"):
+            st.rerun(scope="app")
+
+    esperar_login()
+
+elif not state.get("logged_in"):
+    if state.get("last_message"):
+        st.error(state["last_message"])
     st.markdown(
         "Ingresa tus credenciales de SIIF. El Bot abrirá Chrome y mantendrá la "
         "sesión abierta hasta que cierres sesión."
@@ -97,12 +109,10 @@ if not state.get("logged_in"):
         elif not username or not password:
             st.warning("Usuario y contraseña son obligatorios")
         else:
-            with st.spinner("Abriendo Chrome e iniciando sesión en SIIF..."):
-                response = run_command(
-                    protocol.CMD_LOGIN, {"username": username, "password": password}
-                )
+            response = run_command(
+                protocol.CMD_LOGIN, {"username": username, "password": password}
+            )
             if response and response.ok:
-                st.toast("Sesión iniciada en SIIF", icon="✅")
                 st.rerun()
             elif response:
                 st.error(response.message)
@@ -135,7 +145,7 @@ else:
         snap = client.snapshot()
 
         if snap.get("logged_in") is False and st.session_state.rendered_logged_in:
-            st.rerun()
+            st.rerun(scope="app")
 
         progress = snap.get("progress") or {}
         counters = snap.get("counters") or {}

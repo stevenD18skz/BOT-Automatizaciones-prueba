@@ -35,6 +35,8 @@ class BotSession:
         self.username = ""
         self.logged_in = False
         self.running = False
+        self.connecting = False
+        self.last_message = ""
         self.progress: dict[str, Any] = {"current": 0, "total": 0, "numero_cuenta": ""}
         self.counters: dict[str, int] = {"exitos": 0, "errores": 0}
         self.last_summary: dict[str, Any] | None = None
@@ -46,6 +48,8 @@ class BotSession:
             "username": self.username,
             "logged_in": self.logged_in,
             "running": self.running,
+            "connecting": self.connecting,
+            "last_message": self.last_message,
             "driver_activo": self._chrome is not None,
             "progress": dict(self.progress),
             "counters": dict(self.counters),
@@ -80,8 +84,25 @@ class BotSession:
 
     # --- comandos que tocan Selenium --------------------------------------
     def login(self, username: str, password: str) -> tuple[bool, str]:
+        """Arranca el login en un hilo y responde de inmediato.
+
+        Abrir Chrome y esperar a SIIF puede tardar minutos (DEFAULT_LOGIN_TIMEOUT);
+        si respondiéramos solo al final, el cliente se rendiría antes por timeout.
+        El resultado llega por eventos de estado.
+        """
         if not self._busy.acquire(blocking=False):
             raise BotBusyError("El bot está ocupado con otra operación")
+
+        self.connecting = True
+        self.last_message = ""
+        self._emit_state()
+
+        threading.Thread(
+            target=self._do_login, args=(username, password), name="bot-login", daemon=True
+        ).start()
+        return True, "Abriendo Chrome e iniciando sesión en SIIF..."
+
+    def _do_login(self, username: str, password: str) -> None:
         try:
             self.logout(_already_locked=True)
 
@@ -95,18 +116,21 @@ class BotSession:
             ok, message = self._orchestrator.login(username, password)
             self.logged_in = ok
             self.username = username if ok else ""
+            self.last_message = message
             if not ok:
                 self._close_browser()
-            self._emit_state()
-            return ok, message
         except Exception as exc:
             logging.exception("Error en login")
             self._close_browser()
             self.logged_in = False
-            self._emit_state()
-            return False, f"Error abriendo la sesión: {exc}"
+            self.last_message = f"Error abriendo la sesión: {exc}"
+            self._emit(
+                protocol.EVT_LOG, {"level": "error", "message": self.last_message}
+            )
         finally:
+            self.connecting = False
             self._busy.release()
+            self._emit_state()
 
     def execute(self) -> tuple[bool, str]:
         """Arranca el lote en un hilo y responde de inmediato."""

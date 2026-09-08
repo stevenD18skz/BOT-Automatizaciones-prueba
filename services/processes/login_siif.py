@@ -1,5 +1,9 @@
+import re
+import time
+
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
 
 from core.constants import DEFAULT_LOGIN_TIMEOUT, MESSAGES
 from core.process import BasePage
@@ -28,10 +32,10 @@ class SIIFLoginProcess:
                 failed_msg = "Error en las credenciales de login"
                 return False, failed_msg
 
-            if not self._check_login_success():
+            is_success, error = self._check_login_success()
+            if not is_success:
                 failed_msg = MESSAGES["process"]["failed"].format(
-                    name="SIIFLoginProcess",
-                    error="No se detectó el menú principal",
+                    name="SIIFLoginProcess", error=error
                 )
                 return False, failed_msg
 
@@ -70,12 +74,52 @@ class SIIFLoginProcess:
             self.page.logger.error(f"Error realizando login: {str(e)}")
             return False
 
-    def _check_login_success(self) -> bool:
+    def _check_login_success(self) -> tuple[bool, str]:
+        """Espera al menú (éxito) o a la página de error de SIIF (fallo).
+
+        Vigilar las dos salidas es lo que evita que un login rechazado agote
+        DEFAULT_LOGIN_TIMEOUT completo esperando un menú que nunca llegará.
+
+        Returns:
+            (True, "") si apareció el menú; (False, motivo) si SIIF rechazó.
         """
-        Espera hasta TIMEOUT_LOGIN segundos a que aparezca el menú (id="menu").
-        """
-        try:
-            self.page.wait_for_element((By.ID, "menu"), DEFAULT_LOGIN_TIMEOUT)
-            return True
-        except TimeoutException:
+
+        def resultado(driver):
+            if "ERROR1.ASP" in driver.current_url.upper():
+                return "error"
+            if driver.find_elements(By.ID, "menu"):
+                return "menu"
             return False
+
+        try:
+            estado = WebDriverWait(
+                self.page.driver, DEFAULT_LOGIN_TIMEOUT, poll_frequency=0.5
+            ).until(resultado)
+        except TimeoutException:
+            return False, "No se detectó el menú principal"
+
+        if estado == "menu":
+            return True, ""
+        return False, self._leer_error_siif()
+
+    def _leer_error_siif(self) -> str:
+        """Extrae el mensaje de la pantalla de errores de SIIF.
+
+        La tabla del error tarda un instante más que el encabezado, así que se
+        reintenta hasta ver una línea con código (p. ej. "SFI0048 Usuario no
+        existe en el sistema").
+        """
+        patron = re.compile(r"^[A-Z]{2,5}\d{3,5}\b.+")
+        deadline = time.time() + 5
+        texto = ""
+        while time.time() < deadline:
+            try:
+                texto = self.page.driver.find_element(By.TAG_NAME, "body").text
+            except Exception:
+                self.page.logger.warning("No se pudo leer el error de SIIF", exc_info=True)
+                break
+            for linea in (line.strip() for line in texto.splitlines()):
+                if patron.match(linea):
+                    return linea
+            time.sleep(0.3)
+        return "SIIF rechazó el inicio de sesión"

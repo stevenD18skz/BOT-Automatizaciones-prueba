@@ -17,8 +17,9 @@ BOT_HOST = "127.0.0.1"
 BOT_PORT = 8766
 BOT_URL = f"ws://{BOT_HOST}:{BOT_PORT}"
 
-# Puerto de la UI de Streamlit
-UI_PORT = 8501
+# Puerto de la UI de Streamlit.
+# 8502 y no el 8501 por defecto: ese lo ocupa la UI de credioro-app.
+UI_PORT = 8502
 
 # Excel Config
 INPUT_FILE_PATH = BASE_DIR / "entradas" / "ENTRADAS.xlsx"

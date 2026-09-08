@@ -1,4 +1,6 @@
 import logging
+import shutil
+import tempfile
 
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
@@ -23,7 +25,9 @@ class ChromeDriver:
     """
 
     def __init__(self) -> None:
-        pass
+        self._driver = None
+        self._service = None
+        self._profile_dir: str | None = None
 
     def _configure_chrome_options(self):
         """
@@ -42,6 +46,11 @@ class ChromeDriver:
         # Agregar preferencias de Chrome
         if "prefs" in BROWSER_CONFIG["chrome"]:
             options.add_experimental_option("prefs", BROWSER_CONFIG["chrome"]["prefs"])
+
+        # Perfil nuevo por ejecución: dos instancias no pueden compartirlo, y un
+        # Chrome que quede colgado no bloquea el siguiente arranque.
+        self._profile_dir = tempfile.mkdtemp(prefix="rpa_chrome_")
+        options.add_argument(f"--user-data-dir={self._profile_dir}")
 
         return options
 
@@ -110,6 +119,9 @@ class ChromeDriver:
         finally:
             self._driver = None
             self._service = None
+            if self._profile_dir:
+                shutil.rmtree(self._profile_dir, ignore_errors=True)
+                self._profile_dir = None
 
     def __enter__(self) -> webdriver.Chrome:
         """

@@ -148,9 +148,7 @@ class BotServer:
                 password = str(command.payload.get("password", ""))
                 if not username or not password:
                     return reply(False, "Usuario y contraseña son obligatorios")
-                ok, message = await asyncio.to_thread(
-                    self._session.login, username, password
-                )
+                ok, message = self._session.login(username, password)
                 return reply(ok, message)
 
             if command.cmd == protocol.CMD_EXECUTE:
@@ -170,11 +168,39 @@ class BotServer:
             return reply(False, f"Error interno: {exc}")
 
 
+def _disable_quick_edit() -> None:
+    """Desactiva el modo selección de la consola de Windows.
+
+    Con QuickEdit activo, un clic dentro de la ventana pausa toda escritura a
+    stdout: el `print` del event loop se bloquea y el servidor deja de aceptar
+    conexiones sin dar ningún error.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-10)  # STD_INPUT_HANDLE
+        mode = wintypes.DWORD()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return
+        enable_quick_edit = 0x0040
+        enable_extended_flags = 0x0080
+        kernel32.SetConsoleMode(
+            handle, (mode.value & ~enable_quick_edit) | enable_extended_flags
+        )
+    except Exception:
+        pass
+
+
 def main() -> None:
     # La consola de Windows suele venir en cp1252 y reventaría con los iconos.
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
+    _disable_quick_edit()
 
     setup_logging()
     server = BotServer()

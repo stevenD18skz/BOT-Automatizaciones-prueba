@@ -123,7 +123,9 @@ BROWSER_CONFIG = {
             "--disable-gpu",  # Evita problemas de renderizado
             "--start-maximized",  # Maximiza la ventana para mejor interacción
             "--disable-web-security",  # Evita bloqueos de CORS si es necesario
-            "--user-data-dir=/tmp/chrome_dev_test",  # Directorio temporal para evitar conflictos
+            # El perfil NO se fija aquí: driver_manager crea uno temporal por
+            # ejecución. Con una ruta fija, un Chrome colgado deja el perfil
+            # bloqueado y el siguiente arranque muere con DevToolsActivePort.
         ],
         "prefs": {
             "profile.default_content_setting_values.notifications": 2,  # Bloquea notificaciones

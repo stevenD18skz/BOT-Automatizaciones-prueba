@@ -92,6 +92,8 @@ def setup_logging(log_file: str = "logs/rpa.log"):
     # Suprimir logs específicos de librerías externas
     logging.getLogger("selenium").setLevel(logging.ERROR)
     logging.getLogger("urllib3").setLevel(logging.ERROR)
+    # websockets en DEBUG escribe cada keepalive y ahoga el log del proceso.
+    logging.getLogger("websockets").setLevel(logging.WARNING)
     logging.getLogger("webdriver_manager").setLevel(logging.ERROR)
     logging.getLogger("WDM").setLevel(logging.ERROR)
     logging.getLogger("selenium.webdriver.remote.remote_connection").setLevel(
