@@ -48,32 +48,47 @@ def run_command(cmd: str, payload: dict | None = None) -> protocol.Response | No
 
 
 # --- barra lateral ----------------------------------------------------------
+# Va en un fragmento porque el cuerpo del script solo se redibuja cuando hay
+# interacción: sin esto, el estado de conexión se quedaba congelado y solo se
+# enteraba de que el Bot murió (o volvió) al recargar la página a mano.
+st.session_state.setdefault("rendered_connected", client.connected)
+
 with st.sidebar:
-    st.subheader("Conexión")
-    if client.connected:
-        st.success(f"Bot conectado\n\nws://{BOT_HOST}:{BOT_PORT}")
-    else:
-        st.error(f"Sin conexión con el Bot\n\nws://{BOT_HOST}:{BOT_PORT}")
-        if st.button("Levantar el Bot", use_container_width=True):
-            with st.spinner("Arrancando el proceso del Bot..."):
-                if ensure_bot_running():
-                    st.toast("Bot levantado", icon="🚀")
-                else:
-                    st.toast("No se pudo levantar el Bot", icon="❌")
-            st.rerun()
 
-    state = client.snapshot()
-    st.subheader("Sesión SIIF")
-    if state.get("logged_in"):
-        st.info(f"Conectado como **{state.get('username', '')}**")
-        if st.button("Cerrar sesión SIIF", use_container_width=True):
-            run_command(protocol.CMD_LOGOUT)
-            st.rerun()
-    else:
-        st.caption("Sin sesión activa")
+    @st.fragment(run_every="1s")
+    def panel_conexion() -> None:
+        conectado = client.connected
 
-    st.divider()
-    st.caption(f"{BOT_NAME}\n\n{PROCESS_NAME}")
+        st.subheader("Conexión")
+        if conectado:
+            st.success(f"Bot conectado\n\nws://{BOT_HOST}:{BOT_PORT}")
+        else:
+            st.error(f"Sin conexión con el Bot\n\nws://{BOT_HOST}:{BOT_PORT}")
+            if st.button("Levantar el Bot", use_container_width=True):
+                with st.spinner("Arrancando el proceso del Bot..."):
+                    ensure_bot_running()
+
+        state = client.snapshot()
+        st.subheader("Sesión SIIF")
+        if conectado and state.get("logged_in"):
+            st.info(f"Conectado como **{state.get('username', '')}**")
+            if st.button("Cerrar sesión SIIF", use_container_width=True):
+                run_command(protocol.CMD_LOGOUT)
+                st.rerun(scope="app")
+        else:
+            st.caption("Sin sesión activa")
+
+        st.divider()
+        st.caption(f"{BOT_NAME}\n\n{PROCESS_NAME}")
+
+        # Al caerse o volver el Bot cambia también el cuerpo (formulario de login
+        # vs panel), y eso pide un rerun completo. El flag se actualiza ANTES de
+        # pedirlo: si no, el rerun vuelve a encontrar la diferencia y se cicla.
+        if conectado != st.session_state.rendered_connected:
+            st.session_state.rendered_connected = conectado
+            st.rerun(scope="app")
+
+    panel_conexion()
 
 
 # --- cuerpo -----------------------------------------------------------------
@@ -81,7 +96,15 @@ st.title("🤖 Bot SIIF — Consulta de Cuentas de Ahorros")
 state = client.snapshot()
 st.session_state.rendered_logged_in = state.get("logged_in", False)
 
-if state.get("connecting"):
+if not client.connected:
+    # Sin conexión el estado que tenemos es el último conocido, no el real:
+    # mostrar el panel aquí sería mentir sobre una sesión que quizá ya no existe.
+    st.warning(
+        "El Bot no está disponible. Levántalo desde la barra lateral o con "
+        "`python -m bot.server`; la UI se reconecta sola."
+    )
+
+elif state.get("connecting"):
     st.info("Abriendo Chrome e iniciando sesión en SIIF... (puede tardar unos segundos)")
 
     @st.fragment(run_every="0.5s")

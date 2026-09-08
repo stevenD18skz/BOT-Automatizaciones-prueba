@@ -11,15 +11,13 @@ SIIF_URL = "http://siif.girosyfinanzas.com/BUN_V12/"
 # Base Directory
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Comunicación UI (Streamlit) <-> Bot: WebSocket en localhost.
-# 8766 y no 8765 para no chocar con el bot de credioro_app.
+# Comunicación UI (Streamlit) <-> Bot: WebSocket en localhost
 BOT_HOST = "127.0.0.1"
-BOT_PORT = 8766
+BOT_PORT = 8765
 BOT_URL = f"ws://{BOT_HOST}:{BOT_PORT}"
 
-# Puerto de la UI de Streamlit.
-# 8502 y no el 8501 por defecto: ese lo ocupa la UI de credioro-app.
-UI_PORT = 8502
+# Puerto de la UI de Streamlit (el por defecto de Streamlit)
+UI_PORT = 8501
 
 # Excel Config
 INPUT_FILE_PATH = BASE_DIR / "entradas" / "ENTRADAS.xlsx"

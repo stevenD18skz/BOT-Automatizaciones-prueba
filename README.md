@@ -20,7 +20,7 @@ Streamlit (cliente)  ──WebSocket/JSON──►  Bot (servidor)
 
 Son **dos procesos de Python independientes**. Streamlit nunca toca Selenium: todo pasa por el socket.
 
-**Servidor** (`bot/server.py`) — escucha en `ws://127.0.0.1:8766`. Como Selenium es bloqueante, el trabajo pesado sale del event loop: `login`/`logout` corren en un hilo (`asyncio.to_thread`) y responden al terminar; `execute` arranca un hilo propio y responde *"iniciado"* de inmediato. `ping`, `status` y `stop` se atienden siempre, incluso con un lote corriendo, para que la UI nunca se quede muda.
+**Servidor** (`bot/server.py`) — escucha en `ws://127.0.0.1:8765`. Como Selenium es bloqueante, el trabajo pesado sale del event loop: `login`/`logout` corren en un hilo (`asyncio.to_thread`) y responden al terminar; `execute` arranca un hilo propio y responde *"iniciado"* de inmediato. `ping`, `status` y `stop` se atienden siempre, incluso con un lote corriendo, para que la UI nunca se quede muda.
 
 **Cliente** (`client/ipc.py`) — a diferencia de un socket TCP de petición/respuesta, mantiene **una sola conexión abierta** en un hilo de fondo. Por ahí salen los comandos y por ahí entran tanto las respuestas (correlacionadas por `id`) como los eventos que el Bot empuja solo. El hilo nunca toca la API de Streamlit: escribe en estructuras propias que la UI lee en cada refresco.
 
@@ -108,9 +108,9 @@ Debe tener al menos estas columnas:
 
 `salidas/` y `errores/` se generan solos al terminar.
 
-Los parámetros generales (URL de SIIF, rutas, puerto del WebSocket, tamaño de lote) están en `config/settings.py`.
+Los parámetros generales (URL de SIIF, rutas, puertos, tamaño de lote) están en `config/settings.py`.
 
-> El puerto es **8766** y no 8765 para no chocar con el bot de `credioro_app` si ambos corren en la misma máquina.
+> Si otra aplicación ya ocupa el 8501 o el 8765, cambia `UI_PORT` o `BOT_PORT` en ese archivo.
 
 ## Uso
 
