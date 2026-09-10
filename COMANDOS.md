@@ -181,6 +181,8 @@ Al conectar ya recibes un evento sin pedir nada. Mensajes que puedes enviar:
 { "type": "command", "version": 1, "id": "5", "cmd": "logout", "payload": {} }
 { "type": "command", "version": 1, "id": "6", "cmd": "login",  "payload": { "username": "USUARIO", "password": "CLAVE" } }
 { "type": "command", "version": 1, "id": "7", "cmd": "demo",   "payload": { "registros": 20, "pausa": 1.0 } }
+{ "type": "command", "version": 1, "id": "8", "cmd": "consultar", "payload": { "cuentas": ["00000000000000001", "00000000000000002"] } }
+{ "type": "command", "version": 1, "id": "9", "cmd": "demo",   "payload": { "pausa": 1.0, "cuentas": ["00000000000000001"] } }
 ```
 
 > `demo` recorre un lote falso emitiendo los mismos eventos que una corrida real, sin abrir

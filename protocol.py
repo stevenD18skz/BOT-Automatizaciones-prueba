@@ -38,9 +38,10 @@ CMD_LOGOUT = "logout"
 CMD_EXECUTE = "execute"
 CMD_STOP = "stop"
 CMD_DEMO = "demo"
+CMD_CONSULTAR = "consultar"
 
 KNOWN_COMMANDS = frozenset(
-    {CMD_PING, CMD_STATUS, CMD_LOGIN, CMD_LOGOUT, CMD_EXECUTE, CMD_STOP, CMD_DEMO}
+    {CMD_PING, CMD_STATUS, CMD_LOGIN, CMD_LOGOUT, CMD_EXECUTE, CMD_STOP, CMD_DEMO, CMD_CONSULTAR}
 )
 
 # --- Eventos: servidor -> cliente ------------------------------------------

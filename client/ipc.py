@@ -11,7 +11,6 @@ protegidas por un lock, y la UI las lee en cada rerun.
 from __future__ import annotations
 
 import queue
-import socket
 import subprocess
 import sys
 import threading
@@ -147,12 +146,17 @@ class BotClient:
             return list(self.records)
 
 
-def is_bot_running(host: str = BOT_HOST, port: int = BOT_PORT, timeout: float = 0.5) -> bool:
-    """¿Hay algo escuchando en el puerto del Bot?"""
+def is_bot_running(host: str = BOT_HOST, port: int = BOT_PORT, timeout: float = 1.0) -> bool:
+    """¿Responde el Bot?
+
+    Hace un saludo WebSocket completo. Un sondeo TCP pelado (conectar y cerrar
+    sin enviar nada) hace que el servidor registre "opening handshake failed"
+    con traceback en cada comprobación.
+    """
     try:
-        with socket.create_connection((host, port), timeout=timeout):
+        with connect(f"ws://{host}:{port}", open_timeout=timeout, close_timeout=timeout):
             return True
-    except OSError:
+    except Exception:
         return False
 
 

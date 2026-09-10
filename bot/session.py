@@ -2,8 +2,8 @@
 
 Solo puede haber un navegador y una sesión SIIF a la vez, así que `_busy`
 serializa toda operación que toque Selenium. Los comandos cortos (login,
-logout) se ejecutan y responden; `execute` arranca un hilo y responde de
-inmediato, informando su avance por eventos.
+logout) se ejecutan y responden; las corridas (lote, consulta y demo) arrancan un
+hilo y responden de inmediato, informando su avance por eventos.
 """
 
 from __future__ import annotations
@@ -15,9 +15,13 @@ from typing import Any, Callable
 
 import protocol
 from core import ChromeDriver
+from services.data.cuentas import MAX_CUENTAS_POR_CONSULTA, limpiar_cuentas
+from services.observers import EventObserver, RunNotifier, TraceObserver
 from services.workflows.orchestrator import Orchestrator
 
 Emitter = Callable[[str, dict], None]
+
+SIN_SESION = "No hay sesión activa en SIIF. Inicia sesión primero."
 
 
 class BotBusyError(Exception):
@@ -31,7 +35,6 @@ class BotSession:
         self._chrome: ChromeDriver | None = None
         self._orchestrator: Orchestrator | None = None
         self._stop_event = threading.Event()
-        self._worker: threading.Thread | None = None
 
         self.username = ""
         self.logged_in = False
@@ -61,7 +64,7 @@ class BotSession:
         self._emit(protocol.EVT_STATE, self.snapshot())
 
     def _track(self, event: str, payload: dict[str, Any]) -> None:
-        """Actualiza el estado interno con cada evento del orquestador."""
+        """Actualiza el estado interno con cada evento de la corrida."""
         if event == protocol.EVT_RUN_STARTED:
             self.progress = {
                 "current": 0,
@@ -134,69 +137,98 @@ class BotSession:
             self._emit_state()
 
     def execute(self) -> tuple[bool, str]:
-        """Arranca el lote en un hilo y responde de inmediato."""
+        """Lote desde ENTRADAS.xlsx, en segundo plano."""
         if not self.logged_in or self._orchestrator is None:
-            return False, "No hay sesión activa en SIIF. Inicia sesión primero."
+            return False, SIN_SESION
+        self._lanzar(self._orchestrator.run_batch, "bot-batch")
+        return True, "Proceso iniciado"
+
+    def consultar(self, cuentas: Any) -> tuple[bool, str]:
+        """Consulta en SIIF las cuentas escritas en la UI, en segundo plano."""
+        if not self.logged_in or self._orchestrator is None:
+            return False, SIN_SESION
+        validas, error = self._validar_cuentas(cuentas)
+        if error:
+            return False, error
+        orchestrator = self._orchestrator
+        self._lanzar(lambda: orchestrator.run_consulta(validas), "bot-consulta")
+        return True, f"Consultando {len(validas)} cuenta(s) en SIIF"
+
+    @staticmethod
+    def _validar_cuentas(cuentas: Any) -> tuple[list[str], str | None]:
+        """El Bot valida por su cuenta: no puede fiarse de lo que llegue por el socket."""
+        validas, invalidas = limpiar_cuentas(cuentas or [])
+        if invalidas:
+            return [], "Números de cuenta no válidos (solo dígitos): " + ", ".join(invalidas[:5])
+        if not validas:
+            return [], "Escribe al menos un número de cuenta"
+        if len(validas) > MAX_CUENTAS_POR_CONSULTA:
+            return [], (
+                f"Máximo {MAX_CUENTAS_POR_CONSULTA} cuentas por consulta; "
+                "para más, usa el lote desde ENTRADAS.xlsx"
+            )
+        return validas, None
+
+    def _lanzar(self, trabajo: Callable[[], Any], nombre: str) -> None:
         if not self._busy.acquire(blocking=False):
             raise BotBusyError("Ya hay un proceso en ejecución")
-
         self._stop_event.clear()
         self.running = True
         self._emit_state()
+        threading.Thread(target=self._trabajar, args=(trabajo,), name=nombre, daemon=True).start()
 
-        self._worker = threading.Thread(target=self._run_batch, name="bot-batch", daemon=True)
-        self._worker.start()
-        return True, "Proceso iniciado"
-
-    def _run_batch(self) -> None:
+    def _trabajar(self, trabajo: Callable[[], Any]) -> None:
         try:
-            assert self._orchestrator is not None
-            self._orchestrator.run_batch()
+            trabajo()
         except Exception as exc:
-            logging.exception("Error ejecutando el lote")
+            # La corrida ya se cerró (trazabilidad y resumen) en su propio finally.
+            logging.exception("Error ejecutando el proceso")
             self._emit(
-                protocol.EVT_LOG, {"level": "error", "message": f"Error en el lote: {exc}"}
-            )
-            self._emit(
-                protocol.EVT_RUN_FINISHED,
-                {"error": str(exc), **dict(self.counters), "detenido": True},
+                protocol.EVT_LOG, {"level": "error", "message": f"Error en el proceso: {exc}"}
             )
         finally:
             self.running = False
             self._busy.release()
             self._emit_state()
 
-    def demo(self, registros: int = 12, pausa: float = 1.0) -> tuple[bool, str]:
+    def demo(
+        self, registros: int = 12, pausa: float = 1.0, cuentas: Any = None
+    ) -> tuple[bool, str]:
         """Recorre un lote falso emitiendo los mismos eventos que una corrida real.
 
         No abre Chrome ni toca SIIF: sirve para ver y desarrollar la UI sin gastar
-        una sesión del sistema real. Usa el mismo lock y la misma bandera de
-        parada, así que el botón Detener funciona igual.
+        una sesión del sistema real. Si llegan cuentas escritas en la UI, simula
+        consultarlas a ellas en vez de generar registros. Usa el mismo lock y la
+        misma bandera de parada, así que el botón Detener funciona igual.
         """
-        if not self._busy.acquire(blocking=False):
-            raise BotBusyError("El bot está ocupado con otra operación")
+        validas: list[str] = []
+        if cuentas:
+            validas, error = self._validar_cuentas(cuentas)
+            if error:
+                return False, error
+        self._lanzar(lambda: self._run_demo(registros, pausa, validas), "bot-demo")
+        return True, f"Demo iniciada: {len(validas) or registros} registros simulados"
 
-        self._stop_event.clear()
-        self.running = True
-        self._emit_state()
-
-        threading.Thread(
-            target=self._run_demo, args=(registros, pausa), name="bot-demo", daemon=True
-        ).start()
-        return True, f"Demo iniciada: {registros} registros simulados"
-
-    def _run_demo(self, registros: int, pausa: float) -> None:
+    def _run_demo(self, registros: int, pausa: float, cuentas: list[str]) -> None:
+        # Mismos observadores que una corrida real salvo los Excel de negocio:
+        # la demo deja trazabilidad (marcada como demo) pero no toca CONCILIACION.
+        filas = cuentas or [f"0010021{i:010d}" for i in range(1, registros + 1)]
+        notifier = RunNotifier(
+            [TraceObserver(), EventObserver(self._track)],
+            modo="demo",
+            origen="ui" if cuentas else "lote",
+            usuario=self.username or "demo",
+        )
+        detenido = False
+        error: str | None = None
         try:
             self._emit(
                 protocol.EVT_LOG,
                 {"level": "info", "message": "Modo demo: no se abre Chrome ni se toca SIIF"},
             )
-            self._track(protocol.EVT_RUN_STARTED, {"total": registros})
+            notifier.start(len(filas))
 
-            exitos = errores = 0
-            detenido = False
-
-            for i in range(1, registros + 1):
+            for i, cuenta in enumerate(filas, start=1):
                 if self._stop_event.is_set():
                     detenido = True
                     self._emit(
@@ -205,45 +237,23 @@ class BotSession:
                     )
                     break
 
-                cuenta = f"0010021{i:010d}"
-                self._track(
-                    protocol.EVT_PROGRESS,
-                    {"current": i, "total": registros, "numero_cuenta": cuenta},
-                )
+                entrada = {"INDEX": str(i), "NUMERO_CUENTA": cuenta}
+                notifier.begin_record(i, entrada)
                 time.sleep(pausa)
 
                 ok = i % 4 != 0  # uno de cada cuatro falla, para ver ambos caminos
-                if ok:
-                    exitos += 1
-                else:
-                    errores += 1
-
-                self._track(
-                    protocol.EVT_RECORD,
-                    {
-                        "index": str(i),
-                        "numero_cuenta": cuenta,
-                        "nombre_cuenta": f"CLIENTE DE PRUEBA {i}" if ok else "",
-                        "ok": ok,
-                        "message": "Simulado correctamente" if ok else "Cuenta no encontrada (simulado)",
-                    },
+                notifier.record(
+                    i,
+                    entrada,
+                    ok,
+                    "Simulado correctamente" if ok else "Cuenta no encontrada (simulado)",
+                    {"NOMBRE_CUENTA": f"CLIENTE DE PRUEBA {i}"} if ok else {},
                 )
-
-            self._track(
-                protocol.EVT_RUN_FINISHED,
-                {
-                    "total": registros,
-                    "procesados": exitos + errores,
-                    "exitos": exitos,
-                    "errores": errores,
-                    "detenido": detenido,
-                    "demo": True,
-                },
-            )
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            logging.exception("Error en la demo")
         finally:
-            self.running = False
-            self._busy.release()
-            self._emit_state()
+            notifier.finish(detenido=detenido, error=error)
 
     def request_stop(self) -> tuple[bool, str]:
         """No toma el lock: debe poder llamarse mientras el lote corre."""

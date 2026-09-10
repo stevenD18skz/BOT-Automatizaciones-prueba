@@ -29,3 +29,7 @@
 !/entradas/.gitkeep
 !/salidas/.gitkeep
 !/errores/.gitkeep
+
+# Trazabilidad por corrida: incluye números de cuenta y nombres de clientes
+/trazabilidad/*
+!/trazabilidad/.gitkeep

@@ -24,6 +24,9 @@ INPUT_FILE_PATH = BASE_DIR / "entradas" / "ENTRADAS.xlsx"
 OUTPUT_FILE_PATH = BASE_DIR / "salidas" / "CONCILIACION.xlsx"
 ERROR_FILE_PATH = BASE_DIR / "errores" / "ERRORES.xlsx"
 
+# Trazabilidad por corrida: una línea JSON por registro, escrita al instante
+TRACE_DIR = BASE_DIR / "trazabilidad"
+
 # Batch Size
 BATCH_SIZE = 100
 

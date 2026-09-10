@@ -19,6 +19,7 @@ import streamlit as st  # noqa: E402
 import protocol  # noqa: E402
 from client.ipc import BotClient, BotClientError, ensure_bot_running, is_bot_running  # noqa: E402
 from config.settings import BOT_HOST, BOT_PORT, BOT_NAME, PROCESS_NAME  # noqa: E402
+from services.data.cuentas import limpiar_cuentas  # noqa: E402
 
 st.set_page_config(page_title="Bot SIIF", page_icon="🤖", layout="wide")
 
@@ -45,6 +46,18 @@ def run_command(cmd: str, payload: dict | None = None) -> protocol.Response | No
     except BotClientError as exc:
         st.error(str(exc))
         return None
+
+
+def cuentas_desde_texto(texto: str) -> list[str] | None:
+    """Revisa las cuentas antes de enviarlas, para avisar sin esperar al Bot."""
+    validas, invalidas = limpiar_cuentas(texto)
+    if invalidas:
+        st.warning("Solo se admiten dígitos. Revisa: " + ", ".join(invalidas[:5]))
+        return None
+    if not validas:
+        st.warning("Escribe al menos un número de cuenta.")
+        return None
+    return validas
 
 
 # --- barra lateral ----------------------------------------------------------
@@ -145,19 +158,46 @@ elif not state.get("logged_in") and not state.get("running"):
         "¿Sin credenciales a mano? La demo recorre un lote falso emitiendo los mismos "
         "eventos que una corrida real, sin abrir Chrome ni tocar SIIF."
     )
+    cuentas_demo = st.text_area(
+        "Cuentas a simular (opcional)",
+        placeholder="Si escribes cuentas, la demo simula consultarlas a ellas en vez de generar registros",
+        height=80,
+    )
     demo_cols = st.columns([1, 1, 2])
     registros = demo_cols[0].number_input("Registros", 3, 100, 12)
     pausa = demo_cols[1].number_input("Segundos por registro", 0.2, 5.0, 1.0, step=0.1)
     if demo_cols[2].button("🎬 Lanzar demo", use_container_width=True):
-        response = run_command(
-            protocol.CMD_DEMO, {"registros": int(registros), "pausa": float(pausa)}
-        )
-        if response and response.ok:
-            st.rerun()
-        elif response:
-            st.error(response.message)
+        payload: dict = {"registros": int(registros), "pausa": float(pausa)}
+        cuentas = cuentas_desde_texto(cuentas_demo) if cuentas_demo.strip() else []
+        if cuentas is not None:
+            if cuentas:
+                payload["cuentas"] = cuentas
+            response = run_command(protocol.CMD_DEMO, payload)
+            if response and response.ok:
+                st.rerun()
+            elif response:
+                st.error(response.message)
 
 else:
+    if state.get("logged_in"):
+        # Fuera del fragmento a propósito: con el refresco cada 0.5 s el cuadro de
+        # texto se redibujaría mientras escribes. El form solo envía al pulsar.
+        with st.form("consulta"):
+            st.markdown("**Consultar cuentas de ahorros en SIIF**")
+            texto_cuentas = st.text_area(
+                "Números de cuenta",
+                placeholder="Uno por línea, o separados por comas",
+                height=90,
+            )
+            consultar = st.form_submit_button("🔎 Consultar", type="primary")
+        if consultar:
+            cuentas = cuentas_desde_texto(texto_cuentas)
+            if cuentas:
+                response = run_command(protocol.CMD_CONSULTAR, {"cuentas": cuentas})
+                if response and response.ok:
+                    st.toast(response.message, icon="🔎")
+                elif response:
+                    st.error(response.message)
 
     @st.fragment(run_every="0.5s")
     def live_panel() -> None:
@@ -184,7 +224,7 @@ else:
             col_run, col_stop = st.columns(2)
             running = snap.get("running", False)
             if col_run.button(
-                "▶ Ejecutar proceso",
+                "▶ Ejecutar lote (ENTRADAS.xlsx)",
                 type="primary",
                 disabled=running or not snap.get("logged_in"),
                 use_container_width=True,
@@ -263,12 +303,18 @@ else:
 
         summary = snap.get("last_summary")
         if summary and not snap.get("running"):
-            if summary.get("detenido"):
-                st.warning(f"Última corrida detenida: {summary}")
+            que = "consulta" if summary.get("origen") == "ui" else "corrida"
+            resumen = (
+                f"{summary.get('exitos', 0)} éxitos, {summary.get('errores', 0)} errores "
+                f"de {summary.get('total', 0)} registros"
+            )
+            if summary.get("error"):
+                st.error(f"Última {que} interrumpida por un error ({summary['error']}): {resumen}.")
+            elif summary.get("detenido"):
+                st.warning(f"Última {que} detenida por el usuario: {resumen}.")
             else:
-                st.success(
-                    f"Última corrida: {summary.get('exitos', 0)} éxitos, "
-                    f"{summary.get('errores', 0)} errores de {summary.get('total', 0)} registros."
-                )
+                st.success(f"Última {que}: {resumen}.")
+            if summary.get("trazabilidad"):
+                st.caption(f"Trazabilidad `{summary.get('run_id', '')}`: `{summary['trazabilidad']}`")
 
     live_panel()

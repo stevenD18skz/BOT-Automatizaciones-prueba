@@ -32,7 +32,7 @@ Son **dos procesos de Python independientes**. Streamlit nunca toca Selenium: to
 | `response` | servidor → cliente | resultado de ese `id` |
 | `event` | servidor → cliente | "esto está pasando" — **nadie lo pidió** |
 
-Comandos: `ping`, `status`, `login`, `logout`, `execute`, `stop`.
+Comandos: `ping`, `status`, `login`, `logout`, `execute` (lote desde `ENTRADAS.xlsx`), `consultar` (cuentas escritas en la UI), `stop`, `demo`.
 Eventos: `log`, `state`, `run_started`, `progress`, `record`, `run_finished`.
 
 Los eventos son la razón de usar WebSocket: con un socket TCP clásico la UI tendría que preguntar "¿cómo vas?" en bucle.
