@@ -87,7 +87,11 @@ class BaseProcess(ProcessInterface):
         Returns:
             tuple[bool, str]: (False, mensaje de error)
         """
-        error_message = f"Error en proceso {self.__class__.__name__}: {str(exception)}"
+        # El detalle técnico completo va al log (exc_info); el mensaje que llega a
+        # la UI, a los Excel y a la trazabilidad debe poder leerlo una persona.
+        from core.utils.errores import mensaje_legible
+
+        error_message = f"Error en proceso {self.__class__.__name__}: {mensaje_legible(exception)}"
         self.logger.error(error_message, exc_info=True)
         return False, error_message
 

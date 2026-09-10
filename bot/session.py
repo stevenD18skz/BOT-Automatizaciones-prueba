@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 import protocol
 from core import ChromeDriver
+from core.utils.errores import mensaje_legible
 from services.data.cuentas import MAX_CUENTAS_POR_CONSULTA, limpiar_cuentas
 from services.observers import EventObserver, RunNotifier, TraceObserver
 from services.workflows.orchestrator import Orchestrator
@@ -127,7 +128,7 @@ class BotSession:
             logging.exception("Error en login")
             self._close_browser()
             self.logged_in = False
-            self.last_message = f"Error abriendo la sesión: {exc}"
+            self.last_message = f"No se pudo abrir la sesión: {mensaje_legible(exc)}"
             self._emit(
                 protocol.EVT_LOG, {"level": "error", "message": self.last_message}
             )
@@ -184,7 +185,8 @@ class BotSession:
             # La corrida ya se cerró (trazabilidad y resumen) en su propio finally.
             logging.exception("Error ejecutando el proceso")
             self._emit(
-                protocol.EVT_LOG, {"level": "error", "message": f"Error en el proceso: {exc}"}
+                protocol.EVT_LOG,
+                {"level": "error", "message": f"Error en el proceso: {mensaje_legible(exc)}"},
             )
         finally:
             self.running = False
@@ -250,7 +252,7 @@ class BotSession:
                     {"NOMBRE_CUENTA": f"CLIENTE DE PRUEBA {i}"} if ok else {},
                 )
         except Exception as exc:
-            error = f"{type(exc).__name__}: {exc}"
+            error = mensaje_legible(exc)
             logging.exception("Error en la demo")
         finally:
             notifier.finish(detenido=detenido, error=error)

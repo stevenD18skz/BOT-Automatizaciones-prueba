@@ -177,7 +177,9 @@ class BotServer:
             return reply(False, str(exc))
         except Exception as exc:
             logging.exception(f"Error atendiendo el comando {command.cmd}")
-            return reply(False, f"Error interno: {exc}")
+            from core.utils.errores import mensaje_legible
+
+            return reply(False, f"Error interno: {mensaje_legible(exc)}")
 
 
 def _disable_quick_edit() -> None:

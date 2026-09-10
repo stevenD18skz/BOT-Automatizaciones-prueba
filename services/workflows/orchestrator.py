@@ -5,6 +5,7 @@ from typing import Any, Callable
 import protocol
 from config.settings import BATCH_SIZE, SIIF_URL
 from core.base import BasePage
+from core.utils.errores import mensaje_legible
 from services.data.data_manager import DataManager
 from services.observers import RunNotifier, observadores_por_defecto
 from services.processes.login_siif import SIIFLoginProcess
@@ -109,7 +110,11 @@ class Orchestrator:
                 except Exception as exc:
                     # Queda registrado, pero no se retira de la entrada: se reintentará.
                     notifier.record(
-                        posicion, row, False, f"Error inesperado: {exc}", searcher.get_variables()
+                        posicion,
+                        row,
+                        False,
+                        f"Error inesperado: {mensaje_legible(exc)}",
+                        searcher.get_variables(),
                     )
                     raise
                 notifier.record(posicion, row, ok, mensaje, searcher.get_variables())
@@ -119,7 +124,7 @@ class Orchestrator:
                     if len(pendientes) >= BATCH_SIZE:
                         pendientes = self._retirar_de_entrada(pendientes)
         except Exception as exc:
-            error = f"{type(exc).__name__}: {exc}"
+            error = mensaje_legible(exc)
             raise
         finally:
             self._retirar_de_entrada(pendientes)
@@ -145,5 +150,8 @@ class Orchestrator:
             self.data_manager.update_entries(ids)
             return []
         except Exception as exc:
-            self._log(f"No se pudo actualizar la entrada ({exc}); se reintentará", "warning")
+            self._log(
+                f"No se pudo actualizar la entrada ({mensaje_legible(exc)}); se reintentará",
+                "warning",
+            )
             return ids
