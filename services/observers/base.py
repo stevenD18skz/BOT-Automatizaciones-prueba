@@ -176,3 +176,13 @@ class RunNotifier:
         }
         self._notify("on_run_finished", self.run, self.summary, strict=False)
         return self.summary
+
+{
+    "Nombre": "item()?['Datos']?[0]?['Valor']",
+    "Cedula": "item()?['Datos']?[1]?['Valor']",
+    "Producto": "item()?['Datos']?[2]?['Valor']",
+    "ColumnaOrigen": "item()?['ColumnaOrigen']",
+    "CorreoIngresado": "item()?['CorreoIngresado']",
+    "Motivo": "item()?['Motivo']",
+    "NumeroFilaExcel": "item()?['NumeroFilaExcel']"
+}
